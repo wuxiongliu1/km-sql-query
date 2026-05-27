@@ -35,6 +35,12 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(-5, e.getMessage());
     }
 
+    @ExceptionHandler(com.kisf.sqlquery.core.engine.DmlSafetyException.class)
+    @ResponseStatus(HttpStatus.OK)
+    public ApiResponse<Void> handleDmlSafety(com.kisf.sqlquery.core.engine.DmlSafetyException e) {
+        return ApiResponse.error(-6, e.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.OK)
     public ApiResponse<Void> handleException(Exception e) {
