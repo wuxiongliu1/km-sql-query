@@ -1,4 +1,4 @@
-package com.kisf.sqlquery.admin.entity;
+package com.kisf.sqlquery.core.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 

@@ -3,9 +3,9 @@ package com.kisf.sqlquery.admin.controller;
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.hibernate5.Hibernate5Module;
-import com.kisf.sqlquery.admin.entity.SqlConfig;
+import com.kisf.sqlquery.core.entity.SqlConfig;
 import com.kisf.sqlquery.admin.model.PagedResult;
-import com.kisf.sqlquery.admin.repo.SqlConfigRepository;
+import com.kisf.sqlquery.core.repo.SqlConfigRepository;
 import com.kisf.sqlquery.core.engine.DmlSafetyValidator;
 import com.kisf.sqlquery.admin.service.SqlConfigService;
 import com.kisf.sqlquery.admin.service.impl.SqlConfigServiceImpl;
@@ -100,8 +100,8 @@ class SqlConfigControllerTest {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration
-    @EntityScan("com.kisf.sqlquery.admin.entity")
-    @EnableJpaRepositories("com.kisf.sqlquery.admin.repo")
+    @EntityScan("com.kisf.sqlquery.core.entity")
+    @EnableJpaRepositories("com.kisf.sqlquery.core.repo")
     static class TestConfig {
 
         @Bean

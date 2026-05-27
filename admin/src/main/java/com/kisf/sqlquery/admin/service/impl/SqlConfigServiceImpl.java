@@ -1,7 +1,7 @@
 package com.kisf.sqlquery.admin.service.impl;
 
-import com.kisf.sqlquery.admin.entity.SqlConfig;
-import com.kisf.sqlquery.admin.repo.SqlConfigRepository;
+import com.kisf.sqlquery.core.entity.SqlConfig;
+import com.kisf.sqlquery.core.repo.SqlConfigRepository;
 import com.kisf.sqlquery.admin.service.SqlConfigService;
 import com.kisf.sqlquery.core.engine.DmlSafetyValidator;
 import org.springframework.data.domain.Page;

@@ -1,6 +1,6 @@
 package com.kisf.sqlquery.admin.service;
 
-import com.kisf.sqlquery.admin.entity.DatasourceConfig;
+import com.kisf.sqlquery.core.entity.DatasourceConfig;
 
 import java.util.List;
 import java.util.Optional;

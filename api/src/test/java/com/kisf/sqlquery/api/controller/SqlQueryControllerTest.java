@@ -1,11 +1,11 @@
 package com.kisf.sqlquery.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kisf.sqlquery.admin.entity.DatasourceConfig;
-import com.kisf.sqlquery.admin.entity.SqlConfig;
-import com.kisf.sqlquery.admin.repo.DatasourceConfigRepository;
-import com.kisf.sqlquery.admin.repo.SqlConfigRepository;
-import com.kisf.sqlquery.admin.util.AesUtils;
+import com.kisf.sqlquery.core.entity.DatasourceConfig;
+import com.kisf.sqlquery.core.entity.SqlConfig;
+import com.kisf.sqlquery.core.repo.DatasourceConfigRepository;
+import com.kisf.sqlquery.core.repo.SqlConfigRepository;
+import com.kisf.sqlquery.core.util.AesUtils;
 import com.kisf.sqlquery.core.cache.DataSourceCache;
 import com.kisf.sqlquery.core.engine.MyBatisScriptEngine;
 import com.kisf.sqlquery.core.engine.SqlExecutor;

@@ -1,6 +1,6 @@
 package com.kisf.sqlquery.admin.controller;
 
-import com.kisf.sqlquery.admin.entity.DatasourceConfig;
+import com.kisf.sqlquery.core.entity.DatasourceConfig;
 import com.kisf.sqlquery.admin.service.DatasourceConfigService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

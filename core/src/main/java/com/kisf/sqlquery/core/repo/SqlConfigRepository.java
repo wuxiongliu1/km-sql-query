@@ -1,6 +1,6 @@
-package com.kisf.sqlquery.admin.repo;
+package com.kisf.sqlquery.core.repo;
 
-import com.kisf.sqlquery.admin.entity.SqlConfig;
+import com.kisf.sqlquery.core.entity.SqlConfig;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;

@@ -1,4 +1,4 @@
-package com.kisf.sqlquery.admin.util;
+package com.kisf.sqlquery.core.util;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;

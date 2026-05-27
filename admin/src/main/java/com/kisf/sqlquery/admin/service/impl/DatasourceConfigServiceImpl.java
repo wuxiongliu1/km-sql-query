@@ -1,9 +1,9 @@
 package com.kisf.sqlquery.admin.service.impl;
 
-import com.kisf.sqlquery.admin.entity.DatasourceConfig;
-import com.kisf.sqlquery.admin.repo.DatasourceConfigRepository;
+import com.kisf.sqlquery.core.entity.DatasourceConfig;
+import com.kisf.sqlquery.core.repo.DatasourceConfigRepository;
 import com.kisf.sqlquery.admin.service.DatasourceConfigService;
-import com.kisf.sqlquery.admin.util.AesUtils;
+import com.kisf.sqlquery.core.util.AesUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

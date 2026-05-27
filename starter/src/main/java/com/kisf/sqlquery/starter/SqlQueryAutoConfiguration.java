@@ -2,8 +2,8 @@ package com.kisf.sqlquery.starter;
 
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.datatype.hibernate5.Hibernate5Module;
-import com.kisf.sqlquery.admin.repo.DatasourceConfigRepository;
-import com.kisf.sqlquery.admin.repo.SqlConfigRepository;
+import com.kisf.sqlquery.core.repo.DatasourceConfigRepository;
+import com.kisf.sqlquery.core.repo.SqlConfigRepository;
 import com.kisf.sqlquery.admin.service.DatasourceConfigService;
 import com.kisf.sqlquery.admin.service.SqlConfigService;
 import com.kisf.sqlquery.admin.service.impl.DatasourceConfigServiceImpl;
@@ -24,8 +24,8 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.kisf.sqlquery.api.controller",
         "com.kisf.sqlquery.api.exception"
 })
-@EntityScan("com.kisf.sqlquery.admin.entity")
-@EnableJpaRepositories("com.kisf.sqlquery.admin.repo")
+@EntityScan("com.kisf.sqlquery.core.entity")
+@EnableJpaRepositories("com.kisf.sqlquery.core.repo")
 public class SqlQueryAutoConfiguration {
 
     @Bean

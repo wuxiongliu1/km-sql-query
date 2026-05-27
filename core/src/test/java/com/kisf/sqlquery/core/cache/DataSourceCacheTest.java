@@ -1,8 +1,8 @@
 package com.kisf.sqlquery.core.cache;
 
-import com.kisf.sqlquery.admin.entity.DatasourceConfig;
-import com.kisf.sqlquery.admin.repo.DatasourceConfigRepository;
-import com.kisf.sqlquery.admin.util.AesUtils;
+import com.kisf.sqlquery.core.entity.DatasourceConfig;
+import com.kisf.sqlquery.core.repo.DatasourceConfigRepository;
+import com.kisf.sqlquery.core.util.AesUtils;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

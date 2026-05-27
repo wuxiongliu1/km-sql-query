@@ -1,6 +1,6 @@
 package com.kisf.sqlquery.admin.service;
 
-import com.kisf.sqlquery.admin.entity.SqlConfig;
+import com.kisf.sqlquery.core.entity.SqlConfig;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 

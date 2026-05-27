@@ -15,6 +15,10 @@
     <dependencies>
         <dependency>
             <groupId>com.kisf</groupId>
+            <artifactId>admin</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.kisf</groupId>
             <artifactId>api</artifactId>
         </dependency>
         <dependency>
