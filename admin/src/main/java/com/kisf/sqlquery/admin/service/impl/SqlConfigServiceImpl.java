@@ -3,6 +3,7 @@ package com.kisf.sqlquery.admin.service.impl;
 import com.kisf.sqlquery.admin.entity.SqlConfig;
 import com.kisf.sqlquery.admin.repo.SqlConfigRepository;
 import com.kisf.sqlquery.admin.service.SqlConfigService;
+import com.kisf.sqlquery.core.engine.DmlSafetyValidator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -18,20 +19,25 @@ public class SqlConfigServiceImpl implements SqlConfigService {
 
     private final SqlConfigRepository repo;
     private final Runnable onConfigChange;
+    private final DmlSafetyValidator dmlSafetyValidator;
 
     public SqlConfigServiceImpl(SqlConfigRepository repo) {
         this.repo = repo;
         this.onConfigChange = () -> {};
+        this.dmlSafetyValidator = new DmlSafetyValidator();
     }
 
-    public SqlConfigServiceImpl(SqlConfigRepository repo, Runnable onConfigChange) {
+    public SqlConfigServiceImpl(SqlConfigRepository repo, Runnable onConfigChange,
+                                 DmlSafetyValidator dmlSafetyValidator) {
         this.repo = repo;
         this.onConfigChange = onConfigChange;
+        this.dmlSafetyValidator = dmlSafetyValidator;
     }
 
     @Override
     @Transactional
     public SqlConfig save(SqlConfig config) {
+        dmlSafetyValidator.validate(config.getSqlTemplate());
         SqlConfig saved = repo.save(config);
         onConfigChange.run();
         return saved;
@@ -40,6 +46,7 @@ public class SqlConfigServiceImpl implements SqlConfigService {
     @Override
     @Transactional
     public SqlConfig update(Long id, SqlConfig config) {
+        dmlSafetyValidator.validate(config.getSqlTemplate());
         SqlConfig existing = repo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("SqlConfig not found: " + id));
         existing.setSqlPath(config.getSqlPath());
