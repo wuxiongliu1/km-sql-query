@@ -8,6 +8,7 @@ import com.kisf.sqlquery.admin.service.DatasourceConfigService;
 import com.kisf.sqlquery.admin.service.SqlConfigService;
 import com.kisf.sqlquery.admin.service.impl.DatasourceConfigServiceImpl;
 import com.kisf.sqlquery.admin.service.impl.SqlConfigServiceImpl;
+import com.kisf.sqlquery.core.engine.DmlSafetyValidator;
 import com.kisf.sqlquery.core.cache.DataSourceCache;
 import com.kisf.sqlquery.core.engine.MyBatisScriptEngine;
 import com.kisf.sqlquery.core.engine.SqlExecutor;
@@ -45,8 +46,14 @@ public class SqlQueryAutoConfiguration {
     }
 
     @Bean
-    public SqlConfigService sqlConfigService(SqlConfigRepository repo, MyBatisScriptEngine scriptEngine) {
-        return new SqlConfigServiceImpl(repo, scriptEngine::invalidateAll);
+    public DmlSafetyValidator dmlSafetyValidator() {
+        return new DmlSafetyValidator();
+    }
+
+    @Bean
+    public SqlConfigService sqlConfigService(SqlConfigRepository repo, MyBatisScriptEngine scriptEngine,
+                                              DmlSafetyValidator dmlSafetyValidator) {
+        return new SqlConfigServiceImpl(repo, scriptEngine::invalidateAll, dmlSafetyValidator);
     }
 
     @Bean
