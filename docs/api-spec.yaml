@@ -1,0 +1,589 @@
+openapi: 3.0.3
+info:
+  title: KM-SQL-Query 在线SQL执行平台
+  description: |
+    SQL即接口 —— 统一HTTP端点，通过 `sqlPath` 路由到预配置的 MyBatis 动态SQL模板，
+    绑定多数据源执行。支持 MyBatis 动态SQL语法（`<if>`, `<where>`, `<foreach>`, `<choose>`, `<set>`, `<trim>`）及 `${}` / `#{}` 参数占位符。
+  version: 1.0.0
+  contact:
+    name: KISF
+
+servers:
+  - url: http://localhost:8080
+    description: 本地开发环境
+
+paths:
+  /api/sqlQuery:
+    post:
+      tags:
+        - SQL 查询
+      summary: 统一 SQL 执行入口
+      description: |
+        根据 `sqlPath` 查找预配置的 MyBatis 动态 SQL 模板，绑定对应数据源执行并返回结果。
+        模板必须以 `<select>`, `<insert>`, `<update>` 或 `<delete>` 标签开头。
+        `#{xxx}` 走预编译防注入，`${xxx}` 直接替换。
+      operationId: executeSql
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SqlQueryRequest'
+            examples:
+              select:
+                summary: 查询示例
+                value:
+                  sqlPath: /order/detail
+                  params:
+                    orderId: "123"
+              insert:
+                summary: 插入示例
+                value:
+                  sqlPath: /order/create
+                  params:
+                    name: 新订单
+                    amount: 99.9
+      responses:
+        '200':
+          description: 执行结果（业务错误也返回 HTTP 200，通过 code 区分）
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ApiResponse-List'
+                  - $ref: '#/components/schemas/ApiResponse-Update'
+                  - $ref: '#/components/schemas/ApiResponse-Error'
+              examples:
+                list:
+                  summary: 查询成功
+                  value:
+                    code: 0
+                    message: ok
+                    data:
+                      - orderId: "123"
+                        name: 测试订单
+                        amount: 99.90
+                    total: 1
+                    elapsed: 15
+                update:
+                  summary: 更新成功
+                  value:
+                    code: 0
+                    message: ok
+                    data:
+                      affectedRows: 3
+                    elapsed: 8
+                error:
+                  summary: sqlPath 未找到
+                  value:
+                    code: -2
+                    message: "sqlPath not found: /nonexistent"
+                    data: null
+
+  /api/refresh/{sqlPath}:
+    post:
+      tags:
+        - 热更新
+      summary: 刷新指定 SQL 缓存
+      description: 手动失效指定 sqlPath 的解析缓存，下次请求时重建 MappedStatement。多实例部署时各实例均需调用。
+      operationId: refreshSqlPath
+      parameters:
+        - name: sqlPath
+          in: path
+          required: true
+          schema:
+            type: string
+          description: SQL 接口路径，如 `/order/detail`
+          example: /order/detail
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+              example:
+                success: true
+                sqlPath: /order/detail
+
+  /api/admin/sqlConfig:
+    post:
+      tags:
+        - SQL 配置
+      summary: 创建 SQL 配置
+      description: 创建后自动失效关联缓存。`sqlPath` 需唯一，`sqlTemplate` 需以 `<select>`/`<insert>`/`<update>`/`<delete>` 开头。
+      operationId: createSqlConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SqlConfigCreate'
+            example:
+              sqlPath: /order/detail
+              sqlTemplate: "<select id=\"q\">SELECT * FROM orders WHERE id = #{orderId}</select>"
+              datasourceId: order_db
+              description: 查询订单详情
+              enabled: true
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SqlConfig'
+
+  /api/admin/sqlConfig/{id}:
+    put:
+      tags:
+        - SQL 配置
+      summary: 更新 SQL 配置
+      description: 全量更新，保存后自动失效关联缓存。
+      operationId: updateSqlConfig
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SqlConfigCreate'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SqlConfig'
+    delete:
+      tags:
+        - SQL 配置
+      summary: 删除 SQL 配置
+      operationId: deleteSqlConfig
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: 删除成功
+    get:
+      tags:
+        - SQL 配置
+      summary: 获取 SQL 配置详情
+      operationId: getSqlConfig
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SqlConfig'
+
+  /api/admin/sqlConfig/list:
+    get:
+      tags:
+        - SQL 配置
+      summary: 分页查询 SQL 配置列表
+      operationId: listSqlConfig
+      parameters:
+        - name: sqlPath
+          in: query
+          schema:
+            type: string
+          description: sqlPath 模糊匹配
+        - name: datasourceId
+          in: query
+          schema:
+            type: string
+          description: 数据源标识精确匹配
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 分页结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page-SqlConfig'
+              example:
+                content:
+                  - id: 1
+                    sqlPath: /order/detail
+                    sqlTemplate: "<select id=\"q\">SELECT * FROM orders WHERE id = #{orderId}</select>"
+                    datasourceId: order_db
+                    description: 查询订单详情
+                    enabled: true
+                    createdAt: "2026-05-26T10:00:00"
+                    updatedAt: "2026-05-26T10:00:00"
+                totalElements: 1
+                totalPages: 1
+                number: 0
+                size: 20
+
+  /api/admin/datasource:
+    post:
+      tags:
+        - 数据源配置
+      summary: 创建数据源配置
+      description: 密码字段使用 AES 加密存储。
+      operationId: createDatasource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasourceConfigCreate'
+            example:
+              id: order_db
+              driverClass: com.mysql.cj.jdbc.Driver
+              jdbcUrl: jdbc:mysql://localhost:3306/order_db
+              username: admin
+              password: secret123
+              poolSize: 10
+              extra: '{"connectionTimeout":30000,"maxLifetime":1800000}'
+              enabled: true
+      responses:
+        '200':
+          description: 创建成功（password 字段已加密）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasourceConfig'
+
+  /api/admin/datasource/{id}:
+    put:
+      tags:
+        - 数据源配置
+      summary: 更新数据源配置
+      description: 全量更新。password 为空字符串则保留原密码。更新后关闭旧连接池。
+      operationId: updateDatasource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 数据源标识
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasourceConfigCreate'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasourceConfig'
+    delete:
+      tags:
+        - 数据源配置
+      summary: 删除数据源配置
+      operationId: deleteDatasource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 删除成功
+    get:
+      tags:
+        - 数据源配置
+      summary: 获取数据源配置详情
+      description: password 字段为 AES 加密后的密文。
+      operationId: getDatasource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasourceConfig'
+
+  /api/admin/datasource/list:
+    get:
+      tags:
+        - 数据源配置
+      summary: 查询所有数据源配置列表
+      operationId: listDatasource
+      responses:
+        '200':
+          description: 数据源列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatasourceConfig'
+
+components:
+  schemas:
+    SqlQueryRequest:
+      type: object
+      required:
+        - sqlPath
+      properties:
+        sqlPath:
+          type: string
+          description: SQL 接口路径标识，对应 SqlConfig 中的 `sqlPath`
+          example: /order/detail
+        params:
+          type: object
+          description: 传递给 SQL 模板的参数，key 对应 `#{xxx}` / `${xxx}` 占位符
+          additionalProperties: true
+          example:
+            orderId: "123"
+
+    ApiResponse-List:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 业务状态码，0 表示成功
+          example: 0
+        message:
+          type: string
+          example: ok
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        total:
+          type: integer
+          description: 查询结果行数
+        elapsed:
+          type: integer
+          format: int64
+          description: 执行耗时（毫秒）
+
+    ApiResponse-Update:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: ok
+        data:
+          type: object
+          properties:
+            affectedRows:
+              description: 受影响行数
+        elapsed:
+          type: integer
+          format: int64
+
+    ApiResponse-Error:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 错误码，详见错误码表
+        message:
+          type: string
+        data:
+          nullable: true
+
+    SqlConfig:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        sqlPath:
+          type: string
+        sqlTemplate:
+          type: string
+          description: MyBatis XML 模板，须以 `<select>`/`<insert>`/`<update>`/`<delete>` 开头
+        datasourceId:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SqlConfigCreate:
+      type: object
+      required:
+        - sqlPath
+        - sqlTemplate
+        - datasourceId
+      properties:
+        sqlPath:
+          type: string
+          maxLength: 255
+        sqlTemplate:
+          type: string
+          description: 完整 MyBatis XML 片段，支持 `<if>`, `<where>`, `<foreach>`, `<choose>`, `<set>`, `<trim>`, `<sql>`, `<include>` 及 `#{}` / `${}` 占位符
+        datasourceId:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        enabled:
+          type: boolean
+          default: true
+
+    DatasourceConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 数据源唯一标识
+        driverClass:
+          type: string
+          description: JDBC 驱动类名
+        jdbcUrl:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+          description: AES 加密后的密文
+        poolSize:
+          type: integer
+          default: 10
+        extra:
+          type: string
+          description: JSON 格式的 HikariCP 扩展参数（connectionTimeout, maxLifetime, idleTimeout）
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DatasourceConfigCreate:
+      type: object
+      required:
+        - id
+        - driverClass
+        - jdbcUrl
+        - username
+        - password
+      properties:
+        id:
+          type: string
+          maxLength: 100
+        driverClass:
+          type: string
+          maxLength: 255
+        jdbcUrl:
+          type: string
+          maxLength: 500
+        username:
+          type: string
+          maxLength: 100
+        password:
+          type: string
+          maxLength: 100
+          description: 明文密码，存储时 AES 加密
+        poolSize:
+          type: integer
+          default: 10
+        extra:
+          type: string
+          description: 'JSON 扩展配置，如 {"connectionTimeout":30000}'
+        enabled:
+          type: boolean
+          default: true
+
+    RefreshResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        sqlPath:
+          type: string
+
+    Page-SqlConfig:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/SqlConfig'
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        number:
+          type: integer
+          description: 当前页码（0 起始）
+        size:
+          type: integer
+          description: 每页大小
+
+  examples:
+    ErrorCodes:
+      summary: 错误码说明
+      value:
+        - code: 0
+          description: 成功
+        - code: -1
+          description: 参数校验失败
+        - code: -2
+          description: sqlPath 未找到或已禁用
+        - code: -3
+          description: 数据源不可用
+        - code: -4
+          description: SQL 执行异常
+        - code: -5
+          description: SQL 模板解析失败
+
+tags:
+  - name: SQL 查询
+    description: 统一 SQL 执行和热更新
+  - name: SQL 配置
+    description: SqlConfig CRUD 管理
+  - name: 数据源配置
+    description: DatasourceConfig CRUD 管理
+  - name: 热更新
+    description: 手动刷新 SQL 解析缓存
