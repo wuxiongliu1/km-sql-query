@@ -6,6 +6,7 @@ import com.fasterxml.jackson.datatype.hibernate5.Hibernate5Module;
 import com.kisf.sqlquery.admin.entity.SqlConfig;
 import com.kisf.sqlquery.admin.model.PagedResult;
 import com.kisf.sqlquery.admin.repo.SqlConfigRepository;
+import com.kisf.sqlquery.core.engine.DmlSafetyValidator;
 import com.kisf.sqlquery.admin.service.SqlConfigService;
 import com.kisf.sqlquery.admin.service.impl.SqlConfigServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -111,8 +112,13 @@ class SqlConfigControllerTest {
         }
 
         @Bean
-        public SqlConfigService sqlConfigService(SqlConfigRepository repo) {
-            return new SqlConfigServiceImpl(repo);
+        public DmlSafetyValidator dmlSafetyValidator() {
+            return new DmlSafetyValidator();
+        }
+
+        @Bean
+        public SqlConfigService sqlConfigService(SqlConfigRepository repo, DmlSafetyValidator dmlSafetyValidator) {
+            return new SqlConfigServiceImpl(repo, () -> {}, dmlSafetyValidator);
         }
 
         @Bean
