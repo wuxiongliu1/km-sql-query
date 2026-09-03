@@ -22,12 +22,14 @@ public class SqlQueryController {
     public ApiResponse<?> execute(@RequestBody SqlQueryRequest request) {
         SqlExecutor.ExecuteResult result = sqlExecutor.execute(
                 request.getSqlPath(),
-                request.getParams() != null ? request.getParams() : Collections.emptyMap());
+                request.getParams() != null ? request.getParams() : Collections.emptyMap(),
+                request.getPage(), request.getSize());
 
         if (result.isList()) {
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> rows = (List<Map<String, Object>>) result.getData();
-            return ApiResponse.okList(rows, result.getElapsed());
+            return ApiResponse.okList(rows, result.getElapsed(), result.getPage(),
+                    result.getSize(), result.isHasMore(), result.isTruncated());
         } else {
             Map<String, Object> updateResult = Collections.singletonMap("affectedRows", result.getData());
             return ApiResponse.okUpdate(updateResult, result.getElapsed());

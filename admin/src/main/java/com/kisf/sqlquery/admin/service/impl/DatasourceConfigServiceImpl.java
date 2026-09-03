@@ -9,21 +9,38 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 @Service
 public class DatasourceConfigServiceImpl implements DatasourceConfigService {
 
     private final DatasourceConfigRepository repo;
+    private final Consumer<String> onConfigChange;
+    private final Predicate<String> isReferenced;
 
     public DatasourceConfigServiceImpl(DatasourceConfigRepository repo) {
+        this(repo, id -> {}, id -> false);
+    }
+
+    public DatasourceConfigServiceImpl(DatasourceConfigRepository repo, Consumer<String> onConfigChange) {
+        this(repo, onConfigChange, id -> false);
+    }
+
+    public DatasourceConfigServiceImpl(DatasourceConfigRepository repo, Consumer<String> onConfigChange,
+                                       Predicate<String> isReferenced) {
         this.repo = repo;
+        this.onConfigChange = onConfigChange;
+        this.isReferenced = isReferenced;
     }
 
     @Override
     @Transactional
     public DatasourceConfig save(DatasourceConfig config) {
         config.setPassword(AesUtils.encrypt(config.getPassword()));
-        return repo.save(config);
+        DatasourceConfig saved = repo.save(config);
+        onConfigChange.accept(saved.getId());
+        return saved;
     }
 
     @Override
@@ -40,13 +57,20 @@ public class DatasourceConfigServiceImpl implements DatasourceConfigService {
         existing.setPoolSize(config.getPoolSize());
         existing.setExtra(config.getExtra());
         existing.setEnabled(config.getEnabled());
-        return repo.save(existing);
+        DatasourceConfig updated = repo.save(existing);
+        onConfigChange.accept(id);
+        return updated;
     }
 
     @Override
     @Transactional
     public void delete(String id) {
+        if (isReferenced.test(id)) {
+            throw new IllegalArgumentException(
+                    "Datasource is referenced by SQL configurations: " + id);
+        }
         repo.deleteById(id);
+        onConfigChange.accept(id);
     }
 
     @Override

@@ -3,7 +3,7 @@ info:
   title: KM-SQL-Query 在线SQL执行平台
   description: |
     SQL即接口 —— 统一HTTP端点，通过 `sqlPath` 路由到预配置的 MyBatis 动态SQL模板，
-    绑定多数据源执行。支持 MyBatis 动态SQL语法（`<if>`, `<where>`, `<foreach>`, `<choose>`, `<set>`, `<trim>`）及 `${}` / `#{}` 参数占位符。
+    绑定多数据源执行。支持 MyBatis 动态SQL语法（`<if>`, `<where>`, `<foreach>`, `<choose>`, `<set>`, `<trim>`）和 `#{}` 参数占位符；`${}` 默认禁用。
   version: 1.0.0
   contact:
     name: KISF
@@ -21,7 +21,8 @@ paths:
       description: |
         根据 `sqlPath` 查找预配置的 MyBatis 动态 SQL 模板，绑定对应数据源执行并返回结果。
         模板必须以 `<select>`, `<insert>`, `<update>` 或 `<delete>` 标签开头。
-        `#{xxx}` 走预编译防注入，`${xxx}` 直接替换。
+        `#{xxx}` 走预编译防注入；`${xxx}` 默认因注入风险被拒绝，仅可由服务端配置显式开启。
+        SELECT 默认最多返回 `km.sql-query.max-rows` 行，也可通过 `page`、`size` 请求分页。
       operationId: executeSql
       requestBody:
         required: true
@@ -36,6 +37,8 @@ paths:
                   sqlPath: /order/detail
                   params:
                     orderId: "123"
+                  page: 0
+                  size: 100
               insert:
                 summary: 插入示例
                 value:
@@ -65,6 +68,10 @@ paths:
                         amount: 99.90
                     total: 1
                     elapsed: 15
+                    page: 0
+                    size: 100
+                    hasMore: false
+                    truncated: false
                 update:
                   summary: 更新成功
                   value:
@@ -195,6 +202,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/SqlConfig'
 
+  /api/admin/sqlConfig/test:
+    post:
+      tags:
+        - SQL 配置
+      summary: 测试未发布的 SQL 模板
+      description: 使用目标数据源和实际参数解析、执行模板；执行结束后始终回滚，不保存配置或业务数据。
+      operationId: testSqlConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SqlConfigTestRequest'
+      responses:
+        '200':
+          description: 测试执行结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SqlTestResult'
+
   /api/admin/sqlConfig/list:
     get:
       tags:
@@ -212,6 +240,11 @@ paths:
           schema:
             type: string
           description: 数据源标识精确匹配
+        - name: folder
+          in: query
+          schema:
+            type: string
+          description: folder 精确匹配
         - name: page
           in: query
           schema:
@@ -244,6 +277,22 @@ paths:
                 number: 0
                 size: 20
 
+  /api/admin/sqlConfig/folders:
+    get:
+      tags:
+        - SQL 配置
+      summary: 获取 SQL 配置目录列表
+      operationId: listSqlConfigFolders
+      responses:
+        '200':
+          description: 去重并排序后的非空 folder 列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
   /api/admin/datasource:
     post:
       tags:
@@ -268,7 +317,7 @@ paths:
               enabled: true
       responses:
         '200':
-          description: 创建成功（password 字段已加密）
+          description: 创建成功（响应不返回 password 字段）
           content:
             application/json:
               schema:
@@ -315,11 +364,13 @@ paths:
       responses:
         '204':
           description: 删除成功
+        '200':
+          description: 数据源仍被 SQL 配置引用时返回业务异常
     get:
       tags:
         - 数据源配置
       summary: 获取数据源配置详情
-      description: password 字段为 AES 加密后的密文。
+      description: 响应不返回 password 字段。
       operationId: getDatasource
       parameters:
         - name: id
@@ -351,6 +402,47 @@ paths:
                 items:
                   $ref: '#/components/schemas/DatasourceConfig'
 
+  /api/admin/datasource/test:
+    post:
+      tags:
+        - 数据源配置
+      summary: 保存前测试数据源连接
+      description: 使用请求中的明文密码创建临时连接池，完成验证后立即关闭，不持久化配置。
+      operationId: testDatasourceConnection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasourceConfigCreate'
+      responses:
+        '200':
+          description: 连接测试结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSourceHealth'
+
+  /api/admin/datasource/{id}/health:
+    get:
+      tags:
+        - 数据源配置
+      summary: 获取已保存数据源运行状态
+      operationId: getDatasourceHealth
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 连通性、耗时及连接池状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSourceHealth'
+
 components:
   schemas:
     SqlQueryRequest:
@@ -364,10 +456,19 @@ components:
           example: /order/detail
         params:
           type: object
-          description: 传递给 SQL 模板的参数，key 对应 `#{xxx}` / `${xxx}` 占位符
+          description: 传递给 SQL 模板的参数，key 对应 `#{xxx}` 占位符
           additionalProperties: true
           example:
             orderId: "123"
+        page:
+          type: integer
+          minimum: 0
+          default: 0
+          description: SELECT 页码，从 0 开始
+        size:
+          type: integer
+          minimum: 1
+          description: SELECT 每页行数，不得超过服务端 `km.sql-query.max-rows`
 
     ApiResponse-List:
       type: object
@@ -391,6 +492,18 @@ components:
           type: integer
           format: int64
           description: 执行耗时（毫秒）
+        page:
+          type: integer
+          description: 当前页码
+        size:
+          type: integer
+          description: 请求或默认的每页上限
+        hasMore:
+          type: boolean
+          description: 是否还有下一页
+        truncated:
+          type: boolean
+          description: 未显式分页且结果因服务端上限被截断时为 true
 
     ApiResponse-Update:
       type: object
@@ -434,6 +547,9 @@ components:
           description: MyBatis XML 模板，须以 `<select>`/`<insert>`/`<update>`/`<delete>` 开头
         datasourceId:
           type: string
+        folder:
+          type: string
+          maxLength: 100
         description:
           type: string
         enabled:
@@ -457,8 +573,11 @@ components:
           maxLength: 255
         sqlTemplate:
           type: string
-          description: 完整 MyBatis XML 片段，支持 `<if>`, `<where>`, `<foreach>`, `<choose>`, `<set>`, `<trim>`, `<sql>`, `<include>` 及 `#{}` / `${}` 占位符
+          description: 完整 MyBatis XML 片段，支持动态标签及 `#{}` 占位符；默认禁止 `${}`、多语句及标签与实际 SQL 类型不一致
         datasourceId:
+          type: string
+          maxLength: 100
+        folder:
           type: string
           maxLength: 100
         description:
@@ -467,6 +586,43 @@ components:
         enabled:
           type: boolean
           default: true
+
+    SqlConfigTestRequest:
+      type: object
+      required:
+        - datasourceId
+        - sqlTemplate
+      properties:
+        datasourceId:
+          type: string
+        sqlTemplate:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+
+    SqlTestResult:
+      type: object
+      properties:
+        data:
+          description: SELECT 返回行列表，DML 返回受影响行数
+        elapsed:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        size:
+          type: integer
+        hasMore:
+          type: boolean
+        truncated:
+          type: boolean
 
     DatasourceConfig:
       type: object
@@ -481,9 +637,6 @@ components:
           type: string
         username:
           type: string
-        password:
-          type: string
-          description: AES 加密后的密文
         poolSize:
           type: integer
           default: 10
@@ -534,6 +687,32 @@ components:
           type: boolean
           default: true
 
+    DataSourceHealth:
+      type: object
+      properties:
+        datasourceId:
+          type: string
+        healthy:
+          type: boolean
+        message:
+          type: string
+        elapsed:
+          type: integer
+          format: int64
+          description: 连接验证耗时（毫秒）
+        activeConnections:
+          type: integer
+          nullable: true
+        idleConnections:
+          type: integer
+          nullable: true
+        totalConnections:
+          type: integer
+          nullable: true
+        awaitingConnections:
+          type: integer
+          nullable: true
+
     RefreshResponse:
       type: object
       properties:
@@ -577,6 +756,8 @@ components:
           description: SQL 执行异常
         - code: -5
           description: SQL 模板解析失败
+        - code: -6
+          description: DML 安全校验失败
 
 tags:
   - name: SQL 查询

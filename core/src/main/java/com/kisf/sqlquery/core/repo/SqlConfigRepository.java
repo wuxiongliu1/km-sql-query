@@ -15,6 +15,8 @@ public interface SqlConfigRepository extends JpaRepository<SqlConfig, Long>,
 
     boolean existsBySqlPath(String sqlPath);
 
+    boolean existsByDatasourceId(String datasourceId);
+
     @Query("SELECT DISTINCT s.folder FROM SqlConfig s WHERE s.folder IS NOT NULL AND s.folder != '' ORDER BY s.folder")
     List<String> findDistinctFolders();
 }

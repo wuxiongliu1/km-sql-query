@@ -13,21 +13,27 @@ import javax.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 @Service
 public class SqlConfigServiceImpl implements SqlConfigService {
 
     private final SqlConfigRepository repo;
-    private final Runnable onConfigChange;
+    private final Consumer<String> onConfigChange;
     private final DmlSafetyValidator dmlSafetyValidator;
 
     public SqlConfigServiceImpl(SqlConfigRepository repo) {
         this.repo = repo;
-        this.onConfigChange = () -> {};
+        this.onConfigChange = path -> {};
         this.dmlSafetyValidator = new DmlSafetyValidator();
     }
 
     public SqlConfigServiceImpl(SqlConfigRepository repo, Runnable onConfigChange,
+                                 DmlSafetyValidator dmlSafetyValidator) {
+        this(repo, path -> onConfigChange.run(), dmlSafetyValidator);
+    }
+
+    public SqlConfigServiceImpl(SqlConfigRepository repo, Consumer<String> onConfigChange,
                                  DmlSafetyValidator dmlSafetyValidator) {
         this.repo = repo;
         this.onConfigChange = onConfigChange;
@@ -39,7 +45,7 @@ public class SqlConfigServiceImpl implements SqlConfigService {
     public SqlConfig save(SqlConfig config) {
         dmlSafetyValidator.validate(config.getSqlTemplate());
         SqlConfig saved = repo.save(config);
-        onConfigChange.run();
+        onConfigChange.accept(saved.getSqlPath());
         return saved;
     }
 
@@ -49,6 +55,7 @@ public class SqlConfigServiceImpl implements SqlConfigService {
         dmlSafetyValidator.validate(config.getSqlTemplate());
         SqlConfig existing = repo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("SqlConfig not found: " + id));
+        String previousSqlPath = existing.getSqlPath();
         existing.setSqlPath(config.getSqlPath());
         existing.setSqlTemplate(config.getSqlTemplate());
         existing.setDatasourceId(config.getDatasourceId());
@@ -56,7 +63,10 @@ public class SqlConfigServiceImpl implements SqlConfigService {
         existing.setFolder(config.getFolder());
         existing.setEnabled(config.getEnabled());
         SqlConfig updated = repo.save(existing);
-        onConfigChange.run();
+        onConfigChange.accept(previousSqlPath);
+        if (!previousSqlPath.equals(updated.getSqlPath())) {
+            onConfigChange.accept(updated.getSqlPath());
+        }
         return updated;
     }
 
@@ -65,7 +75,7 @@ public class SqlConfigServiceImpl implements SqlConfigService {
     public void delete(Long id) {
         repo.findById(id).ifPresent(c -> {
             repo.delete(c);
-            onConfigChange.run();
+            onConfigChange.accept(c.getSqlPath());
         });
     }
 

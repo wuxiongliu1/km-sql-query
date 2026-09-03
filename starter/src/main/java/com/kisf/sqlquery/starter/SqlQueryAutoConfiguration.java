@@ -13,6 +13,10 @@ import com.kisf.sqlquery.core.cache.DataSourceCache;
 import com.kisf.sqlquery.core.engine.MyBatisScriptEngine;
 import com.kisf.sqlquery.core.engine.SqlExecutor;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
+import io.micrometer.core.instrument.MeterRegistry;
+import com.kisf.sqlquery.core.engine.SqlQueryMetrics;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
@@ -41,19 +45,23 @@ public class SqlQueryAutoConfiguration {
     }
 
     @Bean
-    public DatasourceConfigService datasourceConfigService(DatasourceConfigRepository repo) {
-        return new DatasourceConfigServiceImpl(repo);
+    public DatasourceConfigService datasourceConfigService(DatasourceConfigRepository repo,
+                                                             SqlConfigRepository sqlConfigRepository,
+                                                             DataSourceCache dataSourceCache) {
+        return new DatasourceConfigServiceImpl(repo, dataSourceCache::invalidate,
+                sqlConfigRepository::existsByDatasourceId);
     }
 
     @Bean
-    public DmlSafetyValidator dmlSafetyValidator() {
-        return new DmlSafetyValidator();
+    public DmlSafetyValidator dmlSafetyValidator(
+            @Value("${km.sql-query.allow-dollar-substitution:false}") boolean allowDollarSubstitution) {
+        return new DmlSafetyValidator(allowDollarSubstitution);
     }
 
     @Bean
     public SqlConfigService sqlConfigService(SqlConfigRepository repo, MyBatisScriptEngine scriptEngine,
                                               DmlSafetyValidator dmlSafetyValidator) {
-        return new SqlConfigServiceImpl(repo, scriptEngine::invalidateAll, dmlSafetyValidator);
+        return new SqlConfigServiceImpl(repo, scriptEngine::invalidate, dmlSafetyValidator);
     }
 
     @Bean
@@ -63,7 +71,14 @@ public class SqlQueryAutoConfiguration {
 
     @Bean
     public SqlExecutor sqlExecutor(SqlConfigRepository configRepo, DataSourceCache dataSourceCache,
-                                   MyBatisScriptEngine scriptEngine) {
-        return new SqlExecutor(configRepo, dataSourceCache, scriptEngine);
+                                   MyBatisScriptEngine scriptEngine, DmlSafetyValidator dmlSafetyValidator,
+                                   @Value("${km.sql-query.timeout-seconds:30}") int queryTimeoutSeconds,
+                                   @Value("${km.sql-query.max-rows:1000}") int maxRows,
+                                   @Value("${km.sql-query.slow-sql-threshold-ms:1000}") long slowSqlThreshold,
+                                   ObjectProvider<MeterRegistry> meterRegistryProvider) {
+        SqlQueryMetrics metrics = new SqlQueryMetrics(
+                meterRegistryProvider.getIfAvailable(), slowSqlThreshold);
+        return new SqlExecutor(configRepo, dataSourceCache, scriptEngine,
+                dmlSafetyValidator, queryTimeoutSeconds, maxRows, metrics);
     }
 }

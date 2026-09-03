@@ -91,4 +91,14 @@ class MyBatisScriptEngineTest {
         Object s = engine.parse("/inval", template2, configuration);
         assertThat(s).isNotNull();
     }
+
+    @Test
+    void shouldRejectDocumentTypeDeclarations() {
+        String template = "<!DOCTYPE select [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>"
+                + "<select>&xxe;</select>";
+
+        assertThatThrownBy(() -> engine.parse("/xxe", template, configuration))
+                .isInstanceOf(SqlExecutor.ScriptParseException.class)
+                .hasMessageContaining("Failed to parse SQL template");
+    }
 }

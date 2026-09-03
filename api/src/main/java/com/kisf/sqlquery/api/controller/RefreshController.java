@@ -21,7 +21,8 @@ public class RefreshController {
     public Map<String, Object> refresh(HttpServletRequest request) {
         String uri = request.getRequestURI();
         String prefix = "/api/refresh/";
-        String sqlPath = uri.substring(uri.indexOf(prefix) + prefix.length());
+        String pathSuffix = uri.substring(uri.indexOf(prefix) + prefix.length());
+        String sqlPath = pathSuffix.startsWith("/") ? pathSuffix : "/" + pathSuffix;
         sqlExecutor.invalidate(sqlPath);
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);

@@ -5,6 +5,7 @@ import com.kisf.sqlquery.core.repo.DatasourceConfigRepository;
 import com.kisf.sqlquery.core.util.AesUtils;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -22,6 +23,11 @@ class DataSourceCacheTest {
     void setUp() {
         repo = mock(DatasourceConfigRepository.class);
         cache = new DataSourceCache(repo);
+    }
+
+    @AfterEach
+    void tearDown() {
+        cache.invalidateAll();
     }
 
     @Test
@@ -47,19 +53,74 @@ class DataSourceCacheTest {
 
     @Test
     void shouldCacheAndReturnSameFactory() {
-        DatasourceConfig config = new DatasourceConfig();
-        config.setId("h2_db");
-        config.setDriverClass("org.h2.Driver");
-        config.setJdbcUrl("jdbc:h2:mem:test_cache;DB_CLOSE_DELAY=-1");
-        config.setUsername("sa");
-        config.setPassword(AesUtils.encrypt(""));
-        config.setPoolSize(5);
-        config.setEnabled(true);
+        DatasourceConfig config = enabledDatasource("h2_db", null);
         when(repo.findById("h2_db")).thenReturn(Optional.of(config));
 
         SqlSessionFactory f1 = cache.getOrCreate("h2_db");
         SqlSessionFactory f2 = cache.getOrCreate("h2_db");
 
         assertThat(f1).isSameAs(f2);
+        verify(repo, times(1)).findById("h2_db");
+    }
+
+    @Test
+    void shouldRebuildFactoryAfterInvalidation() {
+        DatasourceConfig config = enabledDatasource("h2_db", null);
+        when(repo.findById("h2_db")).thenReturn(Optional.of(config));
+
+        SqlSessionFactory first = cache.getOrCreate("h2_db");
+        cache.invalidate("h2_db");
+        SqlSessionFactory second = cache.getOrCreate("h2_db");
+
+        assertThat(second).isNotSameAs(first);
+        verify(repo, times(2)).findById("h2_db");
+    }
+
+    @Test
+    void shouldRejectInvalidExtraConfiguration() {
+        DatasourceConfig config = enabledDatasource("h2_db", "{invalid-json}");
+        when(repo.findById("h2_db")).thenReturn(Optional.of(config));
+
+        assertThatThrownBy(() -> cache.getOrCreate("h2_db"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid extra configuration");
+    }
+
+    @Test
+    void shouldReportCachedDatasourceHealthAndPoolStatistics() {
+        DatasourceConfig config = enabledDatasource("health_db", null);
+        when(repo.findById("health_db")).thenReturn(Optional.of(config));
+
+        DataSourceHealth health = cache.checkHealth("health_db");
+
+        assertThat(health.isHealthy()).isTrue();
+        assertThat(health.getDatasourceId()).isEqualTo("health_db");
+        assertThat(health.getTotalConnections()).isNotNull().isGreaterThanOrEqualTo(1);
+        assertThat(health.getAwaitingConnections()).isZero();
+    }
+
+    @Test
+    void shouldTestUnpersistedDatasourceWithPlaintextPassword() {
+        DatasourceConfig config = enabledDatasource("preview_db", null);
+        config.setPassword("");
+
+        DataSourceHealth health = cache.testConnection(config);
+
+        assertThat(health.isHealthy()).isTrue();
+        assertThat(health.getMessage()).isEqualTo("ok");
+        verify(repo, never()).findById(anyString());
+    }
+
+    private DatasourceConfig enabledDatasource(String id, String extra) {
+        DatasourceConfig config = new DatasourceConfig();
+        config.setId(id);
+        config.setDriverClass("org.h2.Driver");
+        config.setJdbcUrl("jdbc:h2:mem:" + id + ";DB_CLOSE_DELAY=-1");
+        config.setUsername("sa");
+        config.setPassword(AesUtils.encrypt(""));
+        config.setPoolSize(5);
+        config.setExtra(extra);
+        config.setEnabled(true);
+        return config;
     }
 }

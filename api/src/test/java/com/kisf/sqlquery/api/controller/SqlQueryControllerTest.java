@@ -23,6 +23,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -30,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-    "spring.datasource.url=jdbc:h2:mem:testint;DB_CLOSE_DELAY=-1",
+    "spring.datasource.url=jdbc:h2:mem:testint;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
     "spring.datasource.driver-class-name=org.h2.Driver",
     "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
     "spring.jpa.hibernate.ddl-auto=create-drop",
@@ -64,12 +67,15 @@ class SqlQueryControllerTest {
         ds.setEnabled(true);
         dsConfigRepo.save(ds);
 
-        SqlConfig ddl = new SqlConfig();
-        ddl.setSqlPath("/test/ddl");
-        ddl.setSqlTemplate("<update id=\"ddl\">CREATE TABLE IF NOT EXISTS orders (id INT PRIMARY KEY, name VARCHAR(100), amount DECIMAL(10,2))</update>");
-        ddl.setDatasourceId("h2_test");
-        ddl.setEnabled(true);
-        sqlConfigRepo.save(ddl);
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:h2:mem:testexec;DB_CLOSE_DELAY=-1", "sa", "");
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE IF NOT EXISTS orders "
+                    + "(id INT PRIMARY KEY, name VARCHAR(100), amount DECIMAL(10,2))");
+            statement.execute("DELETE FROM orders");
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to initialize test database", e);
+        }
     }
 
     @Test
@@ -87,12 +93,6 @@ class SqlQueryControllerTest {
         select.setDatasourceId("h2_test");
         select.setEnabled(true);
         sqlConfigRepo.save(select);
-
-        // Execute DDL
-        mockMvc.perform(post("/api/sqlQuery")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(mapper.writeValueAsString(buildRequest("/test/ddl", Collections.emptyMap()))))
-                .andExpect(status().isOk());
 
         // Insert
         mockMvc.perform(post("/api/sqlQuery")
@@ -134,12 +134,6 @@ class SqlQueryControllerTest {
         select.setEnabled(true);
         sqlConfigRepo.save(select);
 
-        // Execute DDL first
-        mockMvc.perform(post("/api/sqlQuery")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(mapper.writeValueAsString(buildRequest("/test/ddl", Collections.emptyMap()))))
-                .andExpect(status().isOk());
-
         Map<String, Object> params = new HashMap<>();
         params.put("name", "Test");
         mockMvc.perform(post("/api/sqlQuery")
@@ -158,9 +152,40 @@ class SqlQueryControllerTest {
         config.setEnabled(true);
         sqlConfigRepo.save(config);
 
-        mockMvc.perform(post("/api/refresh//test/refreshme"))
+        mockMvc.perform(post("/api/refresh/test/refreshme"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.sqlPath").value("/test/refreshme"));
+    }
+
+    @Test
+    void shouldReturnPaginationMetadataAndRespectRequestedPageSize() throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:h2:mem:testexec;DB_CLOSE_DELAY=-1", "sa", "");
+             Statement statement = connection.createStatement()) {
+            statement.execute("INSERT INTO orders(id, name, amount) VALUES "
+                    + "(1, 'A', 1), (2, 'B', 2), (3, 'C', 3)");
+        }
+        SqlConfig select = new SqlConfig();
+        select.setSqlPath("/test/page");
+        select.setSqlTemplate("<select id=\"page\">SELECT * FROM orders ORDER BY id</select>");
+        select.setDatasourceId("h2_test");
+        select.setEnabled(true);
+        sqlConfigRepo.save(select);
+
+        Map<String, Object> request = buildRequest("/test/page", Collections.emptyMap());
+        request.put("page", 0);
+        request.put("size", 2);
+        mockMvc.perform(post("/api/sqlQuery")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.hasMore").value(true))
+                .andExpect(jsonPath("$.truncated").value(false));
     }
 
     private Map<String, Object> buildRequest(String sqlPath, Map<String, Object> params) {

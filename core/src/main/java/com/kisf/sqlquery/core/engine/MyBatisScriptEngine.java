@@ -7,15 +7,26 @@ import org.apache.ibatis.session.Configuration;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
+import org.xml.sax.helpers.DefaultHandler;
 
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 
 public class MyBatisScriptEngine {
-
-    private static final String[] STATEMENT_TAGS = {"select", "insert", "update", "delete"};
 
     private final Map<String, SqlSource> sqlSourceCache = new ConcurrentHashMap<>();
 
@@ -36,10 +47,21 @@ public class MyBatisScriptEngine {
      */
     static String extractInnerSql(String sqlTemplate) {
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
-            Document doc = factory.newDocumentBuilder()
-                    .parse(new ByteArrayInputStream(sqlTemplate.getBytes("UTF-8")));
+            DocumentBuilderFactory factory = secureDocumentBuilderFactory();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            builder.setErrorHandler(new DefaultHandler() {
+                @Override
+                public void error(SAXParseException e) throws SAXException {
+                    throw e;
+                }
+
+                @Override
+                public void fatalError(SAXParseException e) throws SAXException {
+                    throw e;
+                }
+            });
+            Document doc = builder.parse(
+                    new ByteArrayInputStream(sqlTemplate.getBytes(StandardCharsets.UTF_8)));
             Node root = firstElement(doc.getChildNodes());
             if (root == null) {
                 throw new SqlExecutor.ScriptParseException("SQL模板必须包含根元素节点");
@@ -62,6 +84,18 @@ public class MyBatisScriptEngine {
         }
     }
 
+    private static DocumentBuilderFactory secureDocumentBuilderFactory() throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        return factory;
+    }
+
     private static Node firstElement(NodeList nodes) {
         for (int i = 0; i < nodes.getLength(); i++) {
             if (nodes.item(i).getNodeType() == Node.ELEMENT_NODE) {
@@ -73,20 +107,21 @@ public class MyBatisScriptEngine {
 
     private static String serializeElement(Node node) {
         try {
-            javax.xml.transform.TransformerFactory tf = javax.xml.transform.TransformerFactory.newInstance();
-            javax.xml.transform.Transformer t = tf.newTransformer();
-            t.setOutputProperty(javax.xml.transform.OutputKeys.OMIT_XML_DECLARATION, "yes");
-            java.io.StringWriter sw = new java.io.StringWriter();
-            t.transform(new javax.xml.transform.dom.DOMSource(node),
-                    new javax.xml.transform.stream.StreamResult(sw));
-            return sw.toString();
+            TransformerFactory factory = TransformerFactory.newInstance();
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            Transformer transformer = factory.newTransformer();
+            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+            StringWriter writer = new StringWriter();
+            transformer.transform(new DOMSource(node), new StreamResult(writer));
+            return writer.toString();
         } catch (Exception e) {
-            return "";
+            throw new SqlExecutor.ScriptParseException(
+                    "Failed to serialize dynamic SQL element: " + e.getMessage(), e);
         }
     }
 
     public SqlCommandType detectCommandType(String sqlTemplate) {
-        String trimmed = sqlTemplate.trim().toLowerCase();
+        String trimmed = sqlTemplate.trim().toLowerCase(Locale.ENGLISH);
         if (trimmed.startsWith("<select")) return SqlCommandType.SELECT;
         if (trimmed.startsWith("<insert")) return SqlCommandType.INSERT;
         if (trimmed.startsWith("<update")) return SqlCommandType.UPDATE;

@@ -4,11 +4,28 @@ spring:
     driver-class-name: org.sqlite.JDBC
   jpa:
     database-platform: org.sqlite.hibernate.dialect.SQLiteDialect
+    open-in-view: false
     hibernate:
       ddl-auto: update
     show-sql: false
 
 server:
   port: 8080
+
+km:
+  sql-query:
+    timeout-seconds: 30
+    max-rows: 1000
+    allow-dollar-substitution: false
+    slow-sql-threshold-ms: 1000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
 
 spring.servlet.multipart.max-request-size: 10MB
