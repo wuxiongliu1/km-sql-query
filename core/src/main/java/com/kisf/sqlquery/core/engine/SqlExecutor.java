@@ -52,28 +52,36 @@ public class SqlExecutor {
         registerMappedStatement(cfg, sqlPath, sqlSource, cmdType);
 
         try (SqlSession session = ssf.openSession()) {
-            Object result;
-            switch (cmdType) {
-                case SELECT:
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> rows = session.selectList(sqlPath, params);
-                    result = rows;
-                    break;
-                case INSERT:
-                    result = session.insert(sqlPath, params);
-                    break;
-                case UPDATE:
-                    result = session.update(sqlPath, params);
-                    break;
-                case DELETE:
-                    result = session.delete(sqlPath, params);
-                    break;
-                default:
-                    throw new ScriptParseException("Unsupported command type: " + cmdType);
-            }
+            try {
+                Object result;
+                switch (cmdType) {
+                    case SELECT:
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> rows = session.selectList(sqlPath, params);
+                        result = rows;
+                        break;
+                    case INSERT:
+                        result = session.insert(sqlPath, params);
+                        session.commit();
+                        break;
+                    case UPDATE:
+                        result = session.update(sqlPath, params);
+                        session.commit();
+                        break;
+                    case DELETE:
+                        result = session.delete(sqlPath, params);
+                        session.commit();
+                        break;
+                    default:
+                        throw new ScriptParseException("Unsupported command type: " + cmdType);
+                }
 
-            long elapsed = System.currentTimeMillis() - start;
-            return new ExecuteResult(result, elapsed);
+                long elapsed = System.currentTimeMillis() - start;
+                return new ExecuteResult(result, elapsed);
+            } catch (RuntimeException | Error e) {
+                session.rollback();
+                throw e;
+            }
         }
     }
 
